@@ -1,6 +1,6 @@
 # bsdiff-java
 
-bsdiff v4.3 Java implementation ( the core diff and patch code is hard-code translated )
+[bsdiff v4.3](https://github.com/MarsHou/bsdiff-4.3) Java implementation ( the core diff and patch code is hard-code translated )
 
 ### Hightlights
 

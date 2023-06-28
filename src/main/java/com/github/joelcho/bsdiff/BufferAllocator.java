@@ -37,6 +37,9 @@ import java.nio.ByteBuffer;
  * Buffer Allocator
  *
  * @author Joel
+ * @see ByteBuffer#allocate(int)
+ * @see ByteBuffer#allocateDirect(int)
+ * @see FileBufferAllocator#allocate(int)
  */
 @FunctionalInterface
 public interface BufferAllocator {

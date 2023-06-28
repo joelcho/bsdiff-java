@@ -34,7 +34,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 /**
- * Seekable Outputsteam
+ * Seekable {@link OutputStream}
  *
  * @author Joel
  */

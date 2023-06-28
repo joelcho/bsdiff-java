@@ -43,13 +43,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * BSDiff v4.3
  * <p>
- * original http://www.daemonology.net/bsdiff/
+ * original <a href="http://www.daemonology.net/bsdiff/">bsdiff</a>
  *
  * @author Joel
  */
 public class BSDiff {
     static final byte[] VERSION = "BSDIFF40".getBytes();
     static final int HEADER_SIZE = 32;
+
+    public static void diff(ByteBuffer old, ByteBuffer new0, SeekableOutputStream out, BufferAllocator ba) throws IOException {
+        diff(old, new0, out, ba, new QSufSortByteBufferImpl(ba));
+    }
 
     /**
      * Header is
@@ -64,18 +68,17 @@ public class BSDiff {
      * ??	??	Bzip2ed diff block
      * ??	??	Bzip2ed extra block
      *
-     * @param old  old file
-     * @param new0 new file
-     * @param out  diff output
-     * @param ba   temp buffer creator
+     * @param old      old file
+     * @param new0     new file
+     * @param out      diff output
+     * @param ba       temp buffer creator
+     * @param qSufSort the QSufSort implementation
      * @throws IOException If some other I/O error occurs
      */
-    public static void diff(ByteBuffer old, ByteBuffer new0, SeekableOutputStream out, BufferAllocator ba) throws IOException {
+    public static void diff(ByteBuffer old, ByteBuffer new0, SeekableOutputStream out, BufferAllocator ba, QSufSort qSufSort) throws IOException {
         final int oldsize = old.limit();
         int newsize = new0.limit();
-        IntBuffer I = ba.allocate((oldsize + 1) * 4).asIntBuffer();
-        IntBuffer V = ba.allocate((oldsize + 1) * 4).asIntBuffer();
-        qsufsort(I, V, old, oldsize);
+        IntBuffer I = qSufSort.sort(old, oldsize);
 
         out.write(new byte[HEADER_SIZE]); // header placeholder
         out.flush();
@@ -213,115 +216,6 @@ public class BSDiff {
             return arr;
         }
         return ByteBuffer.allocate(Long.BYTES).order(ByteOrder.LITTLE_ENDIAN).putLong(v).array();
-    }
-
-    private static void split(IntBuffer I, IntBuffer V, int start, int len, int h) {
-        int i, j, k, x, tmp, jj, kk;
-
-        if (len < 16) {
-            for (k = start; k < start + len; k += j) {
-                j = 1;
-                x = V.get(I.get(k) + h);
-                for (i = 1; k + i < start + len; i++) {
-                    int y = V.get(I.get(k + i) + h);
-                    if (y < x) {
-                        x = y;
-                        j = 0;
-                    }
-                    if (y == x) {
-                        tmp = I.get(k + j);
-                        I.put(k + j, I.get(k + i));
-                        I.put(k + i, tmp);
-                        j++;
-                    }
-                }
-                for (i = 0; i < j; i++) V.put(I.get(k + i), k + j - 1);
-                if (j == 1) I.put(k, -1);
-            }
-            return;
-        }
-        x = V.get(I.get(start + len / 2) + h);
-        jj = 0;
-        kk = 0;
-        for (i = start; i < start + len; i++) {
-            int y = V.get(I.get(i) + h);
-            if (y < x) jj++;
-            if (y == x) kk++;
-        }
-        jj += start;
-        kk += jj;
-
-        i = start;
-        j = 0;
-        k = 0;
-        while (i < jj) {
-            int y = V.get(I.get(i) + h);
-            if (y < x) {
-                i++;
-            } else if (y == x) {
-                tmp = I.get(i);
-                I.put(i, I.get(jj + j));
-                I.put(jj + j, tmp);
-                j++;
-            } else {
-                tmp = I.get(i);
-                I.put(i, I.get(kk + k));
-                I.put(kk + k, tmp);
-                k++;
-            }
-        }
-
-        while (jj + j < kk) {
-            if (V.get(I.get(jj + j) + h) == x) {
-                j++;
-            } else {
-                tmp = I.get(jj + j);
-                I.put(jj + j, I.get(kk + k));
-                I.put(kk + k, tmp);
-                k++;
-            }
-        }
-
-        if (jj > start) split(I, V, start, jj - start, h);
-
-        for (i = 0; i < kk - jj; i++) V.put(I.get(jj + i), kk - 1);
-        if (jj == kk - 1) I.put(jj, -1);
-
-        if (start + len > kk) split(I, V, kk, start + len - kk, h);
-    }
-
-    private static void qsufsort(IntBuffer I, IntBuffer V, ByteBuffer old, int oldsize) {
-        int[] buckets = new int[256];
-        int i, h, len;
-        for (i = 0; i < oldsize; i++) buckets[Byte.toUnsignedInt(old.get(i))]++;
-        for (i = 1; i < 256; i++) buckets[i] += buckets[i - 1];
-        for (i = 255; i > 0; i--) buckets[i] = buckets[i - 1];
-        buckets[0] = 0;
-
-        for (i = 0; i < oldsize; i++) I.put(++buckets[Byte.toUnsignedInt(old.get(i))], i);
-        I.put(0, oldsize);
-        for (i = 0; i < oldsize; i++) V.put(i, buckets[Byte.toUnsignedInt(old.get(i))]);
-        V.put(oldsize, 0);
-        for (i = 1; i < 256; i++) if (buckets[i] == buckets[i - 1] + 1) I.put(buckets[i], -1);
-        I.put(0, -1);
-
-        for (h = 1; I.get(0) != -(oldsize + 1); h += h) {
-            len = 0;
-            for (i = 0; i < oldsize + 1; ) {
-                if (I.get(i) < 0) {
-                    len -= I.get(i);
-                    i -= I.get(i);
-                } else {
-                    if (len != 0) I.put(i - len, -len);
-                    len = V.get(I.get(i)) + 1 - i;
-                    split(I, V, i, len, h);
-                    i += len;
-                    len = 0;
-                }
-            }
-            if (len != 0) I.put(i - len, -len);
-        }
-        for (i = 0; i < oldsize + 1; i++) I.put(V.get(i), i);
     }
 
     private static void writeByteBufferTo(ByteBuffer buffer, int bufSize, OutputStream out) throws IOException {

@@ -41,7 +41,7 @@ import java.nio.ByteOrder;
 /**
  * BSPatch v4.3
  * <p>
- * original http://www.daemonology.net/bsdiff/
+ * original <a href="http://www.daemonology.net/bsdiff/">bsdiff</a>
  *
  * @author Joel
  */
